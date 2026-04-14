@@ -1,0 +1,308 @@
+import React, { useState, useRef, useEffect } from 'react';
+
+export default function App() {
+  const [inputText, setInputText] = useState('김철수, 이영희, 박지민, 최수아, 정윤호, 강태현, 조은지, 윤서준, 임하늘, 한지훈, 오세훈, 서지우');
+  const [availableStudents, setAvailableStudents] = useState([]);
+  const [selectedStudents, setSelectedStudents] = useState([]);
+  const [currentDisplay, setCurrentDisplay] = useState('대기 중...');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [isRelayMode, setIsRelayMode] = useState(false);
+  const audioCtxRef = useRef(null);
+
+  // 폭죽 라이브러리 (canvas-confetti) 로드
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  // Web Audio API 효과음
+  const getAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtxRef.current;
+  };
+
+  const playTick = () => {
+    try {
+      const ctx = getAudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+    } catch (e) {}
+  };
+
+  const playTada = () => {
+    try {
+      const ctx = getAudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); 
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); 
+      osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); 
+      osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.3); 
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {}
+  };
+
+  const fireConfetti = () => {
+    if (window.confetti) {
+      window.confetti({
+        particleCount: 150,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#60A5FA', '#FACC15', '#34D399', '#F87171']
+      });
+    }
+  };
+
+  // 릴레이 모드 처리
+  useEffect(() => {
+    let relayTimeout;
+    if (isRelayMode && !isDrawing) {
+      if (availableStudents.length > 0) {
+        relayTimeout = setTimeout(() => {
+          handleDraw();
+        }, 2000); // 릴레이 간격: 폭죽 감상을 위해 2초로 증가
+      } else {
+        setIsRelayMode(false);
+      }
+    }
+    return () => clearTimeout(relayTimeout);
+  }, [isRelayMode, isDrawing, availableStudents.length]);
+
+  // 명단 저장 및 초기화
+  const handleSaveAndReset = () => {
+    const names = inputText
+      .split(/[\n,]+/)
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
+    
+    const uniqueNames = [...new Set(names)];
+
+    if (uniqueNames.length === 0) {
+      alert('최소 1명 이상의 이름을 입력해주세요.');
+      return;
+    }
+
+    setAvailableStudents(uniqueNames);
+    setSelectedStudents([]);
+    setCurrentDisplay('대기 중...');
+    setIsRelayMode(false);
+  };
+
+  // 초기 1회 명단 자동 적용
+  useEffect(() => {
+    handleSaveAndReset();
+  }, []);
+
+  // 뽑기 로직
+  const handleDraw = () => {
+    if (availableStudents.length === 0) return;
+    
+    getAudioCtx().resume(); 
+    setIsDrawing(true);
+    let ticks = 0;
+    const maxTicks = 20; 
+    const intervalTime = 70; 
+
+    const drawInterval = setInterval(() => {
+      const randomIndex = Math.floor(Math.random() * availableStudents.length);
+      setCurrentDisplay(availableStudents[randomIndex]);
+      playTick(); 
+      ticks++;
+
+      if (ticks >= maxTicks) {
+        clearInterval(drawInterval);
+        
+        const finalIndex = Math.floor(Math.random() * availableStudents.length);
+        const winner = availableStudents[finalIndex];
+        
+        setCurrentDisplay(winner);
+        playTada(); 
+        fireConfetti(); // 폭죽 효과 실행
+        
+        setAvailableStudents(prev => prev.filter(name => name !== winner));
+        setSelectedStudents(prev => [...prev, winner]);
+        
+        setIsDrawing(false);
+      }
+    }, intervalTime);
+  };
+
+  const toggleRelay = () => {
+    if (isRelayMode) {
+      setIsRelayMode(false);
+    } else {
+      if (availableStudents.length === 0) return;
+      getAudioCtx().resume();
+      setIsRelayMode(true);
+      if(currentDisplay === '대기 중...') {
+        handleDraw();
+      }
+    }
+  };
+
+  return (
+    <>
+      <style>
+        {`
+          @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+          .font-jua {
+            font-family: 'Jua', sans-serif;
+          }
+        `}
+      </style>
+      
+      <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8 font-jua text-slate-800 flex flex-col items-center">
+        
+        {/* 헤더 */}
+        <header className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl text-indigo-600 mb-3 flex items-center justify-center gap-3">
+            <span>🎉</span>
+            우리반 발표자 뽑기
+            <span>🏫</span>
+          </h1>
+          <p className="text-lg text-slate-600">긴장되는 순간! 과연 오늘의 발표자는 누구일까요?</p>
+        </header>
+
+        <div className="max-w-6xl w-full flex flex-col lg:flex-row gap-6">
+          
+          {/* 왼쪽: 명단 입력 패널 */}
+          <div className="w-full lg:w-1/3 bg-[#EEF2FF] rounded-3xl p-6 shadow-sm border border-[#E0E7FF] flex flex-col">
+            <div className="flex items-center gap-2 mb-2 text-xl text-indigo-800">
+              <span>📝</span>
+              <h2>명단 입력</h2>
+            </div>
+            <p className="text-sm text-slate-500 mb-4 break-keep">
+              학생 이름을 쉼표(,)나 줄바꿈으로 구분해서 적어주세요.
+            </p>
+            <textarea
+              className="w-full flex-grow min-h-[250px] lg:min-h-0 p-4 border-2 border-indigo-100 rounded-2xl focus:outline-none focus:border-indigo-300 resize-none text-lg text-slate-700 bg-white"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+            />
+            <button
+              onClick={handleSaveAndReset}
+              className="mt-4 w-full bg-[#6366F1] hover:bg-[#4F46E5] text-white text-xl py-4 rounded-2xl transition-colors shadow-md active:scale-95"
+            >
+              명단 저장 / 초기화
+            </button>
+          </div>
+
+          {/* 오른쪽: 뽑기 패널 및 현황 */}
+          <div className="w-full lg:w-2/3 flex flex-col gap-6">
+            
+            {/* 상단: 뽑기 스테이지 */}
+            <div className="bg-[#FFFBEB] rounded-3xl p-8 border-[6px] border-[#FDE047] shadow-sm flex flex-col items-center justify-center min-h-[350px]">
+              <div className="w-full text-left text-[#CA8A04] text-xl mb-4">Lucky Draw!</div>
+              
+              <div className={`text-6xl md:text-8xl my-10 tracking-wider transition-colors ${isDrawing ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                {currentDisplay}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 mt-auto">
+                <button
+                  onClick={handleDraw}
+                  disabled={isDrawing || availableStudents.length === 0 || isRelayMode}
+                  className={`flex items-center justify-center gap-2 py-4 px-8 rounded-full text-2xl transition-all shadow-md
+                    ${isDrawing || availableStudents.length === 0 || isRelayMode
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                      : 'bg-[#FACC15] hover:bg-[#EAB308] text-[#854D0E] active:scale-95'}`}
+                >
+                  <span>🎁</span> 
+                  {availableStudents.length === 0 ? '종료' : '한 명 뽑기'}
+                </button>
+                
+                <button
+                  onClick={toggleRelay}
+                  disabled={availableStudents.length === 0 && !isRelayMode}
+                  className={`flex items-center justify-center gap-2 py-4 px-8 rounded-full text-2xl transition-all shadow-md
+                    ${availableStudents.length === 0 && !isRelayMode
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                      : isRelayMode 
+                        ? 'bg-[#F87171] hover:bg-[#EF4444] text-white active:scale-95'
+                        : 'bg-[#60A5FA] hover:bg-[#3B82F6] text-white active:scale-95'}`}
+                >
+                  <span>🚀</span> 
+                  {isRelayMode ? '릴레이 중지' : '릴레이 뽑기'}
+                </button>
+              </div>
+            </div>
+
+            {/* 하단: 명단 현황 (2단) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* 남은 학생 */}
+              <div className="bg-[#ECFDF5] rounded-3xl p-6 border border-[#A7F3D0] shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="text-xl text-emerald-700 flex items-center gap-2">
+                    <span>🌱</span> 남은 학생
+                  </div>
+                  <div className="bg-[#A7F3D0] text-emerald-800 px-3 py-1 rounded-full text-lg">
+                    {availableStudents.length}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {availableStudents.length > 0 ? (
+                    availableStudents.map((name, idx) => (
+                      <span key={idx} className="bg-white border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-lg">
+                        {name}
+                      </span>
+                    ))
+                  ) : (
+                    <div className="text-slate-400 py-2">아직 없습니다.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* 뽑힌 학생 */}
+              <div className="bg-[#FEF2F2] rounded-3xl p-6 border border-[#FECACA] shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="text-xl text-rose-700 flex items-center gap-2">
+                    <span>🎯</span> 뽑힌 학생
+                  </div>
+                  <div className="bg-[#FECACA] text-rose-800 px-3 py-1 rounded-full text-lg">
+                    {selectedStudents.length}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedStudents.length > 0 ? (
+                    selectedStudents.map((name, idx) => (
+                      <span key={idx} className="bg-white border border-rose-200 text-rose-700 px-3 py-1.5 rounded-lg text-lg">
+                        {name}
+                      </span>
+                    ))
+                  ) : (
+                    <div className="text-slate-400 py-2">아직 없습니다.</div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
